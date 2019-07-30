@@ -2,7 +2,8 @@ from __future__ import print_function
 
 import argparse
 import cv2
-from data import WIDERFace_CLASSES
+#from data import WIDERFace_CLASSES
+#from data import *
 from data import *
 from face_ssd import build_ssd
 import glob
@@ -25,9 +26,9 @@ parser.add_argument('--cuda', default=True, type=bool,
                     help='Use cuda to train model')
 parser.add_argument('--output_threshold', default='0', type=int,
                     help='Cut-off for output')
-parser.add_argument('--annotation_dir', default='../advis/annotations',
+parser.add_argument('--annotation_dir', default='../advis/annotations/',
                     type=str, help='Dir with annotations')
-parser.add_argument('--image_set_dir', default='../advis/samples',
+parser.add_argument('--image_set_dir', default='../advis/data/',
                     type=str, help='Dir with images')
 parser.add_argument('--resize', default='True',
                     type=str, help='Resize images to 1024 pixels, only if annotations are only resized')
@@ -39,8 +40,8 @@ if args.cuda and torch.cuda.is_available():
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
-if not os.path.exists(SAVE_PATH):
-    os.mkdir(SAVE_PATH)
+if not os.path.exists(args.save_path):
+    os.mkdir(args.save_path)
 
 
 def load_img(file_, resizing=args.resize):
@@ -97,7 +98,8 @@ def bbox_vote(det):
         det_accu[:, 0:4] = det_accu[:, 0:4] * np.tile(det_accu[:, -1:], (1, 4))
         max_score = np.max(det_accu[:, 4])
         det_accu_sum = np.zeros((1, 5))
-        det_accu_sum[:, 0:4] = np.sum(det_accu[:, 0:4], axis=0) / np.sum(det_accu[:, -1:])
+        det_accu_sum[:, 0:4] = np.sum(
+            det_accu[:, 0:4], axis=0) / np.sum(det_accu[:, -1:])
         det_accu_sum[:, 4] = max_score
         try:
             dets = np.row_stack((dets, det_accu_sum))
@@ -129,15 +131,14 @@ def infer(net, img, transform, thresh, cuda, shrink):
         img = cv2.resize(img, None, None, fx=shrink, fy=shrink,
                          interpolation=cv2.INTER_LINEAR)
     x = torch.from_numpy(transform(img)[0]).permute(2, 0, 1)
-    with torch.no_grad():
-        x = x.unsqueeze(0)
-        if cuda:
-            x = x.cuda()
-            y = net(x)      # forward pass
+    x = Variable(x.unsqueeze(0), volatile=True)
+    if cuda:
+        x = x.cuda()
+    y = net(x)      # forward pass
     detections = y.data
     # scale each detection back up to the image
     scale = torch.Tensor([img.shape[1]/shrink, img.shape[0]/shrink,
-                         img.shape[1]/shrink, img.shape[0]/shrink])
+                          img.shape[1]/shrink, img.shape[0]/shrink])
     det = []
     for i in range(detections.size(1)):
         j = 0
@@ -145,20 +146,21 @@ def infer(net, img, transform, thresh, cuda, shrink):
             score = detections[0, i, j, 0]
             #label_name = labelmap[i-1]
             pt = (detections[0, i, j, 1:]*scale).cpu().numpy()
-            coords = (pt[0], pt[1], pt[2], pt[3]) 
+            coords = (pt[0], pt[1], pt[2], pt[3])
             det.append([pt[0], pt[1], pt[2], pt[3], score])
             j += 1
     if (len(det)) == 0:
-        det = [ [0.1,0.1,0.2,0.2,0.01] ]
+        det = [[0.1, 0.1, 0.2, 0.2, 0.01]]
     det = np.array(det)
 
     keep_index = np.where(det[:, 4] >= 0)[0]
     det = det[keep_index, :]
     return det
 
-def infer_flip(net , img , transform , thresh , cuda , shrink):
+
+def infer_flip(net, img, transform, thresh, cuda, shrink):
     img = cv2.flip(img, 1)
-    det = infer(net , img , transform , thresh , cuda , shrink)
+    det = infer(net, img, transform, thresh, cuda, shrink)
     det_t = np.zeros(det.shape)
     det_t[:, 0] = img.shape[1] - det[:, 2]
     det_t[:, 1] = det[:, 1]
@@ -168,28 +170,34 @@ def infer_flip(net , img , transform , thresh , cuda , shrink):
     return det_t
 
 
-def infer_multi_scale_sfd(net , img , transform , thresh , cuda ,  max_im_shrink):
+def infer_multi_scale_sfd(net, img, transform, thresh, cuda,  max_im_shrink):
     # shrink detecting and shrink only detect big face
     st = 0.5 if max_im_shrink >= 0.75 else 0.5 * max_im_shrink
-    det_s = infer(net , img , transform , thresh , cuda , st)
-    index = np.where(np.maximum(det_s[:, 2] - det_s[:, 0] + 1, det_s[:, 3] - det_s[:, 1] + 1) > 30)[0]
+    det_s = infer(net, img, transform, thresh, cuda, st)
+    index = np.where(np.maximum(
+        det_s[:, 2] - det_s[:, 0] + 1, det_s[:, 3] - det_s[:, 1] + 1) > 30)[0]
     det_s = det_s[index, :]
     # enlarge one times
-    bt = min(2, max_im_shrink) if max_im_shrink > 1 else (st + max_im_shrink) / 2
-    det_b = infer(net , img , transform , thresh , cuda , bt)
+    bt = min(2, max_im_shrink) if max_im_shrink > 1 else (
+        st + max_im_shrink) / 2
+    det_b = infer(net, img, transform, thresh, cuda, bt)
     # enlarge small iamge x times for small face
     if max_im_shrink > 2:
         bt *= 2
         while bt < max_im_shrink:
-            det_b = np.row_stack((det_b, infer(net , img , transform , thresh , cuda , bt)))
+            det_b = np.row_stack(
+                (det_b, infer(net, img, transform, thresh, cuda, bt)))
             bt *= 2
-        det_b = np.row_stack((det_b, infer(net , img , transform , thresh , cuda , max_im_shrink) ))
+        det_b = np.row_stack(
+            (det_b, infer(net, img, transform, thresh, cuda, max_im_shrink)))
     # enlarge only detect small face
     if bt > 1:
-        index = np.where(np.minimum(det_b[:, 2] - det_b[:, 0] + 1, det_b[:, 3] - det_b[:, 1] + 1) < 100)[0]
+        index = np.where(np.minimum(
+            det_b[:, 2] - det_b[:, 0] + 1, det_b[:, 3] - det_b[:, 1] + 1) < 100)[0]
         det_b = det_b[index, :]
     else:
-        index = np.where(np.maximum(det_b[:, 2] - det_b[:, 0] + 1, det_b[:, 3] - det_b[:, 1] + 1) > 30)[0]
+        index = np.where(np.maximum(
+            det_b[:, 2] - det_b[:, 0] + 1, det_b[:, 3] - det_b[:, 1] + 1) > 30)[0]
         det_b = det_b[index, :]
     return det_s, det_b
 
@@ -206,9 +214,9 @@ def detect_face(image, shrink):
 
     x = torch.from_numpy(x).permute(2, 0, 1)
     x = x.unsqueeze(0)
-    with torch.no_grad():
-        x = x.cuda()
-        y = net(x)
+    x = Variable(x.cuda(), volatile=True)
+
+    y = net(x)
     detections = y.data
     scale = torch.Tensor([width, height, width, height])
 
@@ -252,12 +260,13 @@ def multi_scale_test(image, max_im_shrink):
                                 det_s[:, 3] - det_s[:, 1] + 1) > 30)[0]
     det_s = det_s[index, :]
     # enlarge one times
-    bt = min(2, max_im_shrink) if max_im_shrink > 1 else (st + max_im_shrink) / 2
+    bt = min(2, max_im_shrink) if max_im_shrink > 1 else (
+        st + max_im_shrink) / 2
     det_b = detect_face(image, bt)
 
     # enlarge small iamge x times for small face
     if max_im_shrink > 1.5:
-        det_b = np.row_stack((det_b, detect_face(image,1.5)))
+        det_b = np.row_stack((det_b, detect_face(image, 1.5)))
     if max_im_shrink > 2:
         bt *= 2
         while bt < max_im_shrink:  # and bt <= 2:
@@ -278,11 +287,13 @@ def multi_scale_test(image, max_im_shrink):
 
     return det_s, det_b
 
+
 def multi_scale_test_pyramid(image, max_shrink):
     # shrink detecting and shrink only detect big face
     det_b = detect_face(image, 0.25)
     index = np.where(
-        np.maximum(det_b[:, 2] - det_b[:, 0] + 1, det_b[:, 3] - det_b[:, 1] + 1)
+        np.maximum(det_b[:, 2] - det_b[:, 0] + 1,
+                   det_b[:, 3] - det_b[:, 1] + 1)
         > 30)[0]
     det_b = det_b[index, :]
 
@@ -321,27 +332,34 @@ def flip_test(image, shrink):
 def detect_kb_faces():
     # evaluation
     save_path = args.save_path
+
     annotations = glob.glob(args.annotation_dir + '/*')  # load annotation xml
-    image_set = glob.glob(args.image_set_dir + '/*')  # load image files
+    image_set = glob.glob(args.image_set_dir + '/**/*')  # load image files
 
     annotations_base = [os.path.splitext(os.path.basename(annotation))[0]
                         for annotation in annotations]
 
-    for i in range(0, len(image_set)):
+    # for i in range(0, len(image_set)):
+    for i in range(0, 50):
+
         img_id = os.path.splitext(os.path.basename(image_set[i]))[0]
         if img_id in annotations_base:
             image = load_img(image_set[i])
 
-            print('Detecting Faces in image {:d}/{:d} {}....'.format(i+1, num_images , img_id))
+            print(
+                'Detecting Faces in image {:d}/{:d} {}....'.format(i+1, len(image_set), img_id))
 
-            max_im_shrink = (0x7fffffff / 200.0 / (image.shape[0] * image.shape[1])) ** 0.5  # the max size of input image for caffe
+            # the max size of input image for caffe
+            max_im_shrink = (0x7fffffff / 200.0 /
+                             (image.shape[0] * image.shape[1])) ** 0.5
             max_im_shrink = 3 if max_im_shrink > 3 else max_im_shrink
 
             shrink = max_im_shrink if max_im_shrink < 1 else 1
 
             det0 = detect_face(image, shrink)  # origin test
             det1 = flip_test(image, shrink)    # flip test
-            [det2, det3] = multi_scale_test(image, max_im_shrink)  # multi-scale test
+            [det2, det3] = multi_scale_test(
+                image, max_im_shrink)  # multi-scale test
             det4 = multi_scale_test_pyramid(image, max_im_shrink)
             det = np.row_stack((det0, det1, det2, det3, det4))
 
@@ -359,7 +377,8 @@ def detect_kb_faces():
 
 if __name__ == '__main__':
     cfg = widerface_640
-    num_classes = len(WIDERFace_CLASSES) + 1  # +1 background
+    num_classes = 1
+    num_classes = num_classes + 1  # +1 background
     net = build_ssd('test', cfg['min_dim'], num_classes)  # initialize SSD
     net.load_state_dict(torch.load(args.trained_model))
     net.cuda()
@@ -367,4 +386,3 @@ if __name__ == '__main__':
     print('Finished loading model!')
 
     detect_kb_faces()
-
