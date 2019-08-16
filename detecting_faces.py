@@ -17,7 +17,7 @@ plt.switch_backend('agg')
 
 
 parser = argparse.ArgumentParser(description="DSFD: Dual Shot Face Detector")
-parser.add_argument('--save_path', default='./eval_tools', type=str,
+parser.add_argument('--save_path', default='./dt_DSFD', type=str,
                     help='Output for evaluation files')
 parser.add_argument('--trained_model',
                     default='weights/WIDERFace_DSFD_RES152.pth',
