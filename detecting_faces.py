@@ -311,9 +311,7 @@ def detect_kb_faces():
     annotations_base = [os.path.splitext(os.path.basename(annotation))[0]
                         for annotation in annotations]
 
-    # for i in range(0, len(image_set)):
-    for i in range(0, 50):
-
+    for i in range(0, len(image_set)):
         img_id = os.path.splitext(os.path.basename(image_set[i]))[0]
         if img_id in annotations_base:
             image = load_img(image_set[i])
