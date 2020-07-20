@@ -16,7 +16,7 @@ from torch.autograd import Variable
 plt.switch_backend('agg')
 
 parser = argparse.ArgumentParser(description="DSFD: Dual Shot Face Detector")
-parser.add_argument('--save_path', default='./eval_tools', type=str,
+parser.add_argument('--save_path', default='./dt_DSFD', type=str,
                     help='Output for evaluation files')
 parser.add_argument('--trained_model',
                     default='weights/WIDERFace_DSFD_RES152.pth',
@@ -29,9 +29,6 @@ parser.add_argument('--annotation_dir', default='../advis/annotations/',
                     type=str, help='Dir with annotations')
 parser.add_argument('--image_set_dir', default='../advis/data/',
                     type=str, help='Dir with images')
-parser.add_argument('--resize', default='True',
-                    type=str, help='Resize images to 1024 pixels, only if annotations are only resized')
-# TO DO: include resizing of annotations in write_txt
 
 args = parser.parse_args()
 
@@ -43,35 +40,10 @@ if not os.path.exists(args.save_path):
     os.mkdir(args.save_path)
 
 
-def load_img(file_, resizing=args.resize):
+def load_img(file_,):
     img = cv2.imread(file_, cv2.IMREAD_COLOR)
     h, w = img.shape[:2]
-    if resizing is True:
-        if w >= 1000 or h >= 1000:
-            print('resizing!')
-            if w > h:
-                img = image_resize(img, width=1024)
-            else:
-                img = image_resize(img, height=1024)
     return img
-
-
-def image_resize(image, width=None, height=None, inter=cv2.INTER_AREA):
-    dim = None
-    (h, w) = image.shape[:2]
-
-    if width is None and height is None:
-        return image
-
-    if width is None:
-        r = height / float(h)
-        dim = (int(w * r), height)
-    else:
-        r = width / float(w)
-        dim = (width, int(h * r))
-
-    resized = cv2.resize(image, dim, interpolation=inter)
-    return resized
 
 
 def bbox_vote(det):
@@ -338,9 +310,7 @@ def detect_kb_faces():
     annotations_base = [os.path.splitext(os.path.basename(annotation))[0]
                         for annotation in annotations]
 
-    # for i in range(0, len(image_set)):
-    for i in range(0, 50):
-
+    for i in range(0, len(image_set)):
         img_id = os.path.splitext(os.path.basename(image_set[i]))[0]
         if img_id in annotations_base:
             image = load_img(image_set[i])
@@ -351,7 +321,7 @@ def detect_kb_faces():
             # the max size of input image for caffe
             max_im_shrink = (0x7fffffff / 200.0 /
                              (image.shape[0] * image.shape[1])) ** 0.5
-            max_im_shrink = 3 if max_im_shrink > 3 else max_im_shrink
+            max_im_shrink = 5 if max_im_shrink > 5 else max_im_shrink
 
             shrink = max_im_shrink if max_im_shrink < 1 else 1
 
