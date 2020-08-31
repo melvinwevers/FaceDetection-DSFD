@@ -2,8 +2,7 @@ from __future__ import print_function
 
 import argparse
 import cv2
-#from data import WIDERFace_CLASSES
-#from data import *
+#from data import widerface_640
 from data import *
 from face_ssd import build_ssd
 import glob
@@ -116,9 +115,9 @@ def infer(net, img, transform, thresh, cuda, shrink):
         j = 0
         while detections[0, i, j, 0] >= thresh:
             score = detections[0, i, j, 0]
-            #label_name = labelmap[i-1]
+            # label_name = labelmap[i-1]
             pt = (detections[0, i, j, 1:]*scale).cpu().numpy()
-            coords = (pt[0], pt[1], pt[2], pt[3])
+            # coords = (pt[0], pt[1], pt[2], pt[3])
             det.append([pt[0], pt[1], pt[2], pt[3], score])
             j += 1
     if (len(det)) == 0:
@@ -186,6 +185,8 @@ def detect_face(image, shrink):
 
     x = torch.from_numpy(x).permute(2, 0, 1)
     x = x.unsqueeze(0)
+    # with torch.no_grad():
+    #    x = Variable(x.cuda())
     x = Variable(x.cuda(), volatile=True)
 
     y = net(x)
@@ -307,13 +308,17 @@ def detect_kb_faces():
 
     annotations = glob.glob(args.annotation_dir + '/*')  # load annotation xml
     image_set = glob.glob(args.image_set_dir + '/**/*')  # load image files
+    # detections = glob.glob(args.save_path + '/*')
 
     annotations_base = [os.path.splitext(os.path.basename(annotation))[0]
                         for annotation in annotations]
 
+    #detections_base = [os.path.splitext(os.path.basename(detection))[0]]
+
     for i in range(0, len(image_set)):
         img_id = os.path.splitext(os.path.basename(image_set[i]))[0]
         if img_id in annotations_base:
+            # if img_id in annotations_base and img_id not in detections_base:
             image = load_img(image_set[i])
 
             print(
