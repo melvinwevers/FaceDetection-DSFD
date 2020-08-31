@@ -14,7 +14,6 @@ from torch.autograd import Variable
 
 plt.switch_backend('agg')
 
-
 parser = argparse.ArgumentParser(description="DSFD: Dual Shot Face Detector")
 parser.add_argument('--save_path', default='./dt_DSFD', type=str,
                     help='Output for evaluation files')
@@ -108,8 +107,8 @@ def infer(net, img, transform, thresh, cuda, shrink):
     y = net(x)      # forward pass
     detections = y.data
     # scale each detection back up to the image
-    scale = torch.Tensor([img.shape[1]/shrink, img.shape[0]/shrink,
-                          img.shape[1]/shrink, img.shape[0]/shrink])
+    scale = torch.Tensor([img.shape[1] / shrink, img.shape[0] / shrink,
+                          img.shape[1] / shrink, img.shape[0] / shrink])
     det = []
     for i in range(detections.size(1)):
         j = 0
@@ -141,7 +140,7 @@ def infer_flip(net, img, transform, thresh, cuda, shrink):
     return det_t
 
 
-def infer_multi_scale_sfd(net, img, transform, thresh, cuda,  max_im_shrink):
+def infer_multi_scale_sfd(net, img, transform, thresh, cuda, max_im_shrink):
     # shrink detecting and shrink only detect big face
     st = 0.5 if max_im_shrink >= 0.75 else 0.5 * max_im_shrink
     det_s = infer(net, img, transform, thresh, cuda, st)
